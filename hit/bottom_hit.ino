@@ -71,10 +71,17 @@
  const int limitSwitch = 13;  // 敲擊限位（常開，高觸發）
  bool motorRunning = false;
  
+// ===================== 狀態與心跳 =====================
+char current_status[16] = "initializing"; // 小寫：initializing/ready/moving/hitting/error
+unsigned long last_heartbeat_ms = 0;
+const unsigned long heartbeat_interval_ms = 1000; // 1s 心跳
+
  // ===================== 函數宣告 =====================
  void moveToTarget(float target_x, float target_y);
  void hitOnce();
  void initializeAxes();
+void set_status(const char* s);
+void publish_position_now();
  
  // ===================== 步進控制 =====================
  static inline void pulseStep(int stepPin) {
@@ -161,6 +168,8 @@ void initializeHitMotor() {
  void moveToTarget(float target_x, float target_y) {
    if (target_x < 0.0f || target_x > max_x || target_y < 0.0f || target_y > max_y) return;
  
+  set_status("moving");
+
    float x_steps_f = (target_x - current_x) * (steps_per_rotation / hit_of_circle);
    float y_steps_f = (target_y - current_y) * (steps_per_rotation / hit_of_circle);
    int x_steps = (int)(x_steps_f >= 0 ? floorf(x_steps_f + 0.5f) : ceilf(x_steps_f - 0.5f));
@@ -171,6 +180,8 @@ void initializeHitMotor() {
  
    current_x = target_x;
    current_y = target_y;
+  publish_position_now();
+  set_status("ready");
  }
  
  // ===================== 敲擊控制 =====================
@@ -182,6 +193,27 @@ void initializeHitMotor() {
    digitalWrite(motorPin1, LOW);
    digitalWrite(motorPin2, LOW);
  }
+
+// ===================== 狀態/位置回報 =====================
+void set_status(const char* s) {
+  // 限制長度，並保持小寫格式
+  size_t n = strlen(s);
+  if (n >= sizeof(current_status)) n = sizeof(current_status) - 1;
+  memcpy(current_status, s, n);
+  current_status[n] = '\0';
+  // 立刻回報一次狀態
+  char buf[48];
+  int len = snprintf(buf, sizeof(buf), "status:%s", current_status);
+  if (len < 0) return;
+  publish_locate_text(buf);
+}
+
+void publish_position_now() {
+  char buf[64];
+  int len = snprintf(buf, sizeof(buf), "pos:%.2f,%.2f", current_x, current_y);
+  if (len < 0) return;
+  publish_locate_text(buf);
+}
  
  // ===================== ROS 輔助函式 =====================
  void publish_locate_text(const char* txt) {
@@ -303,12 +335,23 @@ void initializeHitMotor() {
 
   // 發佈「上線完成」
   publish_initialized_ok();
+  set_status("ready");
+  publish_position_now();
 
  }
  
  // ===================== 主迴圈 =====================
  void loop() {
-   rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100));
+  rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100));
+  unsigned long now_ms = millis();
+  if (now_ms - last_heartbeat_ms >= heartbeat_interval_ms) {
+    last_heartbeat_ms = now_ms;
+    // 心跳：狀態 + 位置
+    char sbuf[48];
+    int slen = snprintf(sbuf, sizeof(sbuf), "status:%s", current_status);
+    if (slen > 0) publish_locate_text(sbuf);
+    publish_position_now();
+  }
  }
  
  // ===================== 敲擊流程 =====================
@@ -319,6 +362,7 @@ void hitOnce() {
   
     Serial.println("敲擊動作開始");
     publish_locate_text("start_recording");
+    set_status("hitting");
   
     // 朝敲擊方向旋轉（與初始化相同）
     digitalWrite(motorPin1, HIGH);
@@ -333,6 +377,7 @@ void hitOnce() {
         stopMotor();
         motorRunning = false;
         publish_locate_text("stop_recording");
+        set_status("error");
         return;
       }
     }
@@ -342,5 +387,6 @@ void hitOnce() {
     motorRunning = false;
     publish_locate_text("stop_recording");
     Serial.println("敲擊完成（已碰到限位停止）");
+    set_status("ready");
   }
   

@@ -1,1 +1,54 @@
 /microros_ws
+# ===========================================
+# ROS 2 Workspace .gitignore
+# ===========================================
+
+# Build and install folders
+build/
+install/
+log/
+
+# Colcon / CMake / Python cache
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+*.so
+*.o
+*.a
+*.out
+
+# Colcon metadata
+.colcon/
+CTestTestfile.cmake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# VSCode / CLion / IDE configs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ROS 2 / DDS generated files
+*.idl
+*.msg
+*.srv
+*.action
+*.log
+
+# Python virtual environments
+venv/
+.env/
+
+# Miscellaneous
+*.DS_Store
+*.bak
+*.tmp
+
+# micro-ROS build artifacts (if any)
+src/uros/micro-ROS-Agent/build/
+src/uros/micro-ROS-Agent/install/
+src/uros/micro-ROS-Agent/log/

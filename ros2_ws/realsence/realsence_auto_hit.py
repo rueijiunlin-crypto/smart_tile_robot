@@ -81,21 +81,6 @@ class AutoHitVisionNode(Node):
         ], dtype=np.float32)
         self.calib_background = None             # 校正時顯示的凍結畫面
 
-        # ======================== 自動校正（ArUco / Anchor） ========================
-        self.auto_calib_enabled = True          # 啟動時若無 H，自動嘗試 ArUco/Anchor 校正
-        self.auto_calib_attempts = 0            # 已嘗試次數（避免每幀無限嘗試）
-        self.max_auto_calib_attempts = 300      # 嘗試上限（約 3~5 秒內）
-        self.aruco_dict_name = 'DICT_4X4_50'    # 預設字典（可在 /system_config 中調整）
-        # 四個角的 ArUco ID（依序：BL, BR, TR, TL）——請照此配置貼在工作平面四角
-        self.aruco_corner_ids = [0, 1, 2, 3]
-        # Anchor：單一 ArUco 錨點（已知大小與世界座標）
-        self.anchor_enabled = True
-        self.anchor_marker_id = 10
-        self.anchor_marker_size_mm = 50.0       # 正方形邊長（mm）
-        self.anchor_world_bl_x = self.workspace_x_min
-        self.anchor_world_bl_y = self.workspace_y_min
-        self.anchor_axis_aligned = True         # 若錨點邊與工作軸對齊，直接用軸對齊四點
-
         # ======================== 鎖定與流程控制 ========================
         self.start_center_thresh_px = 60.0   # 啟動條件：距中心距離閾值
         self.lock_reacquire_thresh_px = 80.0
@@ -167,31 +152,6 @@ class AutoHitVisionNode(Node):
                     self.min_area = int(data['min_area'])
                 if 'max_area' in data:
                     self.max_area = int(data['max_area'])
-                # ---- 自動校正（ArUco / Anchor）相關 ----
-                if 'auto_calib_enabled' in data:
-                    self.auto_calib_enabled = bool(data['auto_calib_enabled'])
-                if 'aruco_dict_name' in data:
-                    self.aruco_dict_name = str(data['aruco_dict_name'])
-                if 'aruco_corner_ids' in data:
-                    try:
-                        cand = list(map(int, data['aruco_corner_ids']))
-                        if len(cand) == 4:
-                            self.aruco_corner_ids = cand
-                        else:
-                            self.get_logger().warn('aruco_corner_ids must have 4 integers (BL,BR,TR,TL)')
-                    except Exception:
-                        self.get_logger().warn('Parse aruco_corner_ids failed; expect 4 integers')
-                if 'anchor_enabled' in data:
-                    self.anchor_enabled = bool(data['anchor_enabled'])
-                if 'anchor_marker_id' in data:
-                    self.anchor_marker_id = int(data['anchor_marker_id'])
-                if 'anchor_marker_size_mm' in data:
-                    self.anchor_marker_size_mm = float(data['anchor_marker_size_mm'])
-                if 'anchor_world_bl' in data and isinstance(data['anchor_world_bl'], (list, tuple)) and len(data['anchor_world_bl']) == 2:
-                    self.anchor_world_bl_x = float(data['anchor_world_bl'][0])
-                    self.anchor_world_bl_y = float(data['anchor_world_bl'][1])
-                if 'anchor_axis_aligned' in data:
-                    self.anchor_axis_aligned = bool(data['anchor_axis_aligned'])
         except Exception as e:
             self.get_logger().warn(f'Config parse error: {e}')
 
@@ -282,112 +242,6 @@ class AutoHitVisionNode(Node):
                     cv2.setMouseCallback('AutoHit Vision - Color', lambda *args: None)
                 except Exception:
                     pass
-
-    # ======================== 自動校正（ArUco / Anchor）函式 ========================
-    def get_aruco_module(self):
-        return getattr(cv2, 'aruco', None)
-
-    def auto_calibrate_from_aruco(self, color_bgr):
-        """利用工作平面四角的 ArUco ID 自動計算單應性 H 並儲存。
-        需求：在工作平面四角貼上對應 ID（BL,BR,TR,TL）
-        """
-        aruco = self.get_aruco_module()
-        if aruco is None:
-            self.get_logger().warn('cv2.aruco not available; auto calibration disabled')
-            return False
-
-        dict_id = getattr(aruco, self.aruco_dict_name, None)
-        if dict_id is None:
-            self.get_logger().warn(f'Invalid ArUco dict: {self.aruco_dict_name}')
-            return False
-
-        try:
-            dictionary = aruco.getPredefinedDictionary(dict_id)
-        except Exception:
-            # 舊版 OpenCV 介面相容
-            dictionary = aruco.Dictionary_get(dict_id)
-
-        params = aruco.DetectorParameters_create() if hasattr(aruco, 'DetectorParameters_create') else aruco.DetectorParameters()
-        gray = cv2.cvtColor(color_bgr, cv2.COLOR_BGR2GRAY)
-        corners, ids, _ = aruco.detectMarkers(gray, dictionary, parameters=params)
-        if ids is None or len(ids) == 0:
-            return False
-
-        ids = ids.flatten().tolist()
-        id_to_center = {}
-        for i, mid in enumerate(ids):
-            pts = corners[i][0]  # (4,2)
-            c = pts.mean(axis=0)
-            id_to_center[int(mid)] = (float(c[0]), float(c[1]))
-
-        ordered_img_pts = []
-        for mid in self.aruco_corner_ids:  # BL, BR, TR, TL
-            if mid not in id_to_center:
-                return False
-            ordered_img_pts.append(id_to_center[mid])
-
-        img_pts = np.array(ordered_img_pts, dtype=np.float32)
-        wld_pts = self.calib_world_points  # BL, BR, TR, TL（mm）
-        H, mask = cv2.findHomography(img_pts, wld_pts, method=cv2.RANSAC, ransacReprojThreshold=2.0)
-        if H is None:
-            return False
-        self.homography_H = H.astype(np.float32)
-        self.save_homography()
-        self.get_logger().info(f'Auto-calibration (ArUco) succeeded. H saved to {self.h_file}')
-        return True
-
-    def auto_calibrate_from_anchor(self, color_bgr):
-        """僅用單一 ArUco 錨點（已知 ID 與大小、世界座標）估算 H。
-        假設錨點與工作座標軸對齊，則世界四角：
-          BL=(x0,y0), BR=(x0+S,y0), TR=(x0+S,y0+S), TL=(x0,y0+S)
-        以影像四角對應世界四角即可計算 H。
-        """
-        if not self.anchor_enabled:
-            return False
-        aruco = self.get_aruco_module()
-        if aruco is None:
-            return False
-        dict_id = getattr(aruco, self.aruco_dict_name, None)
-        if dict_id is None:
-            return False
-        try:
-            dictionary = aruco.getPredefinedDictionary(dict_id)
-        except Exception:
-            dictionary = aruco.Dictionary_get(dict_id)
-        params = aruco.DetectorParameters_create() if hasattr(aruco, 'DetectorParameters_create') else aruco.DetectorParameters()
-        gray = cv2.cvtColor(color_bgr, cv2.COLOR_BGR2GRAY)
-        corners, ids, _ = aruco.detectMarkers(gray, dictionary, parameters=params)
-        if ids is None or len(ids) == 0:
-            return False
-        ids = ids.flatten().tolist()
-        if self.anchor_marker_id not in ids:
-            return False
-        idx = ids.index(self.anchor_marker_id)
-        pts = corners[idx][0]  # tl, tr, br, bl (順時針)
-        # 影像點順序改為 BL, BR, TR, TL
-        img_pts = np.array([pts[3], pts[2], pts[1], pts[0]], dtype=np.float32)
-
-        if not self.anchor_axis_aligned:
-            self.get_logger().warn('anchor_axis_aligned=False not supported yet')
-            return False
-
-        x0 = self.anchor_world_bl_x
-        y0 = self.anchor_world_bl_y
-        S  = self.anchor_marker_size_mm
-        wld_pts = np.array([
-            [x0, y0],
-            [x0 + S, y0],
-            [x0 + S, y0 + S],
-            [x0, y0 + S],
-        ], dtype=np.float32)
-
-        H, mask = cv2.findHomography(img_pts, wld_pts, method=cv2.RANSAC, ransacReprojThreshold=2.0)
-        if H is None:
-            return False
-        self.homography_H = H.astype(np.float32)
-        self.save_homography()
-        self.get_logger().info(f'Anchor auto-calibration succeeded. H saved to {self.h_file}')
-        return True
 
     @staticmethod
     def rect_long_axis(rect):
@@ -508,28 +362,7 @@ class AutoHitVisionNode(Node):
             self.get_logger().error('Camera read failed')
             return
 
-        # 啟動後若尚未有 H，且允許自動校正 → 嘗試以 ArUco/Anchor 自動重建 H
-        if self.homography_H is None and self.auto_calib_enabled and self.auto_calib_attempts < self.max_auto_calib_attempts:
-            ok = self.auto_calibrate_from_aruco(frame)
-            if (not ok) and self.anchor_enabled:
-                ok = self.auto_calibrate_from_anchor(frame)
-            self.auto_calib_attempts += 1
-            if ok:
-                # 成功一次即可關閉自動嘗試（避免多次覆寫）
-                self.auto_calib_enabled = False
-
         proc_vis, color_vis, rects, main_rect, (cx_img, cy_img) = self.detect_and_lock_target(frame)
-
-        # 視覺狀態提示（左上角）
-        try:
-            status_txt = 'H:OK' if self.homography_H is not None else 'H:NONE'
-            if self.homography_H is None and self.auto_calib_enabled:
-                status_txt += f'  AutoCalib {self.auto_calib_attempts}/{self.max_auto_calib_attempts}'
-                if self.anchor_enabled:
-                    status_txt += ' +ANCHOR'
-            cv2.putText(proc_vis, status_txt, (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-        except Exception:
-            pass
 
         # --- 若偵測到矩形 ---
         if main_rect is not None:
@@ -541,17 +374,13 @@ class AutoHitVisionNode(Node):
 
             (rcx, rcy) = main_rect[0]
             dist_center = np.hypot(rcx - cx_img, rcy - cy_img)
-            # 若主矩形接近畫面中心 → 啟動打擊序列（需 H 有效）
-            if (not self.hit_sequence_active) and (dist_center < self.start_center_thresh_px) and (self.homography_H is not None):
+            # 若主矩形接近畫面中心 → 啟動打擊序列
+            if (not self.hit_sequence_active) and (dist_center < self.start_center_thresh_px):
                 self.keyboard_pub.publish(String(data='t'))  # 啟動信號
                 self.hit_sequence_active = True
                 self.hit_index = 0
                 self.seq_phase = 'IDLE'
                 self.get_logger().info(f'Hit sequence started for tile {self.tile_index}')
-            elif self.homography_H is None:
-                for vis in (proc_vis, color_vis):
-                    cv2.putText(vis, 'Need H calibration (press a or place markers)', (10, 60),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         else:
             # 若沒找到 → 顯示提示
             self.publish_status('no_target')
@@ -561,12 +390,6 @@ class AutoHitVisionNode(Node):
 
         # ======================== 打擊 FSM 流程 ========================
         if self.hit_sequence_active and len(self.target_points_img) == 3:
-            # 無 H 時不允許進行序列，直接結束並提示
-            if self.homography_H is None:
-                self.get_logger().info('H not available; aborting active hit sequence')
-                self.hit_sequence_active = False
-                self.keyboard_pub.publish(String(data='e'))
-                return
             # (1) 完成三點 → 結束
             if self.hit_index >= 3 and self.seq_phase == 'IDLE':
                 self.keyboard_pub.publish(String(data='e'))
@@ -576,11 +399,6 @@ class AutoHitVisionNode(Node):
 
             # (2) 發送下一個移動指令
             elif self.seq_phase == 'IDLE':
-                if self.homography_H is None:
-                    for vis in (proc_vis, color_vis):
-                        cv2.putText(vis, 'H required; cannot publish coordinates', (10, 88),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-                    return
                 ix, iy = self.target_points_img[self.hit_index]
                 wx, wy = self.image_to_workspace(ix, iy)
                 self.coordinates_pub.publish(String(data=f"{wx:.2f},{wy:.2f}"))
@@ -611,7 +429,7 @@ class AutoHitVisionNode(Node):
         if self.calib_mode and self.calib_background is not None:
             vis = self.calib_background.copy()
             guide = [
-                'Window frozen. Start calibration: click BL \u2192 BR \u2192 TR \u2192 TL',
+                'Window frozen. Start calibration: click BL → BR → TR → TL',
                 'Calibration: click 4 points in order',
                 '1) Bottom-Left  2) Bottom-Right  3) Top-Right  4) Top-Left',
                 f'Clicked: {len(self.calib_img_points)}/4',
@@ -629,23 +447,18 @@ class AutoHitVisionNode(Node):
         else:
             cv2.imshow('AutoHit Vision - Color', color_vis)
 
-        # 鍵盤控制：q 退出；c 開始校正；r 清除 H；l 載入 H；a 自動校正
+        # 鍵盤控制：q 退出；c 開始校正；r 清除 H；l 載入 H
         key = cv2.waitKey(1) & 0xFF
-        if key in (ord('q'), ord('Q')):
+        if key == ord('q'):
             rclpy.shutdown()
-        elif key in (ord('c'), ord('C')):
+        elif key == ord('c'):
             # 開始校正（凍結當前畫面）
             self.start_calibration(color_vis)
-        elif key in (ord('r'), ord('R')):
+        elif key == ord('r'):
             self.homography_H = None
             self.get_logger().info('Homography reset; fallback to linear mapping')
-        elif key in (ord('l'), ord('L')):
+        elif key == ord('l'):
             self.load_homography()
-        elif key in (ord('a'), ord('A')):
-            # 立即嘗試使用當前畫面做 ArUco/Anchor 自動校正
-            ok = self.auto_calibrate_from_aruco(color_vis) or self.auto_calibrate_from_anchor(color_vis)
-            if not ok:
-                self.get_logger().info('Auto-calibration failed (need 4 ArUco IDs at BL,BR,TR,TL or valid anchor)')
 
 
 # ======================== 主程序入口 ========================

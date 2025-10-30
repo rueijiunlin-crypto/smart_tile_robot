@@ -107,6 +107,13 @@ class AutoHitVisionNode(Node):
         cfg.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
         profile = self.rs_pipe.start(cfg)
 
+        # 預先建立視窗，確保可綁定滑鼠回呼
+        try:
+            cv2.namedWindow('AutoHit Vision - Color')
+            cv2.namedWindow('AutoHit Vision - Processed (Gray+Edges)')
+        except Exception:
+            pass
+
         # 關閉紅外線投影器避免干擾
         for s in profile.get_device().sensors:
             if s.supports(rs.option.emitter_enabled):
@@ -120,6 +127,8 @@ class AutoHitVisionNode(Node):
 
         # 嘗試載入既有的單應性
         self.load_homography()
+        if self.homography_H is None:
+            self.get_logger().info('提示：按下 c 進行四點校正（BL→BR→TR→TL）以建立 homography.npy')
 
     # ======================== 取得一張影像 ========================
     def get_bgr_frame(self):
@@ -184,7 +193,10 @@ class AutoHitVisionNode(Node):
                 H = np.load(self.h_file)
                 if isinstance(H, np.ndarray) and H.shape == (3, 3):
                     self.homography_H = H.astype(np.float32)
-                    self.get_logger().info('Loaded homography H from file')
+                    if not self._validate_homography_matrix(self.homography_H):
+                        self.get_logger().warn('Loaded H failed validation; please re-calibrate (press c)')
+                    else:
+                        self.get_logger().info('Loaded homography H from file')
                 else:
                     self.get_logger().warn('Invalid homography file format; ignoring')
             else:
@@ -211,20 +223,41 @@ class AutoHitVisionNode(Node):
             self.get_logger().warn('findHomography failed')
             return False
         self.homography_H = H.astype(np.float32)
+        # 校驗 H（簡單重投影誤差）
+        if not self._validate_homography_points(img_pts, wld_pts, self.homography_H):
+            self.get_logger().warn('Calibration residual too large; please re-calibrate (ensure correct BL→BR→TR→TL order)')
         self.save_homography()
         self.get_logger().info('Homography computed and saved. Calibration finished.')
         return True
+
+    def _validate_homography_matrix(self, H: np.ndarray) -> bool:
+        try:
+            # 行列式不可太小（避免奇異）
+            det = np.linalg.det(H[:2, :2])
+            return np.isfinite(det) and abs(det) > 1e-6
+        except Exception:
+            return False
+
+    def _validate_homography_points(self, img_pts: np.ndarray, wld_pts: np.ndarray, H: np.ndarray) -> bool:
+        try:
+            pred = cv2.perspectiveTransform(img_pts.reshape(1, -1, 2), H).reshape(-1, 2)
+            err = np.linalg.norm(pred - wld_pts, axis=1)
+            mean_err = float(np.mean(err))
+            self.get_logger().info(f'Calibration reprojection mean error: {mean_err:.2f} mm')
+            return mean_err < 5.0
+        except Exception:
+            return False
 
     # ======================== 單應性：互動式校正（滑鼠四點） ========================
     def start_calibration(self, color_frame_vis):
         self.calib_mode = True
         self.calib_img_points = []
         self.calib_background = color_frame_vis.copy()
-        try:
-            cv2.setMouseCallback('AutoHit Vision - Color', self._on_mouse_calib)
-        except Exception:
-            # 窗口尚未建立時，稍後再次設定
-            pass
+        # 綁定滑鼠回呼（若視窗尚未建立，已於 __init__ 嘗試建立）
+        cv2.setMouseCallback('AutoHit Vision - Color', self._on_mouse_calib)
+        # 暫停序列流程，避免畫面動態干擾
+        self.hit_sequence_active = False
+        self.seq_phase = 'IDLE'
         self.get_logger().info('Window frozen. Start calibration: click BL, BR, TR, TL in order')
 
     def _on_mouse_calib(self, event, x, y, flags, param=None):
@@ -364,6 +397,37 @@ class AutoHitVisionNode(Node):
 
         proc_vis, color_vis, rects, main_rect, (cx_img, cy_img) = self.detect_and_lock_target(frame)
 
+        # 校正模式：只顯示凍結畫面，不執行偵測/發佈/狀態機
+        if self.calib_mode and self.calib_background is not None:
+            # 確保回呼持續綁定
+            try:
+                cv2.setMouseCallback('AutoHit Vision - Color', self._on_mouse_calib)
+            except Exception:
+                pass
+            vis = self.calib_background.copy()
+            guide = [
+                'Calibration: click 4 points in order',
+                '1) Bottom-Left  2) Bottom-Right  3) Top-Right  4) Top-Left',
+                f'Clicked: {len(self.calib_img_points)}/4',
+                'Keys: r=reset H, l=load H, q=quit'
+            ]
+            y0 = 24
+            for i, line in enumerate(guide):
+                cv2.putText(vis, line, (10, y0 + i*22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            for i, (px, py) in enumerate(self.calib_img_points):
+                cv2.circle(vis, (int(px), int(py)), 6, (0, 255, 255), -1)
+            cv2.imshow('AutoHit Vision - Color', vis)
+            # 不更新處理視窗，達到凍結效果
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):
+                rclpy.shutdown()
+            elif key == ord('r'):
+                self.homography_H = None
+                self.get_logger().info('Homography reset; fallback to linear mapping')
+            elif key == ord('l'):
+                self.load_homography()
+            return
+
         # --- 若偵測到矩形 ---
         if main_rect is not None:
             # 取得三個打擊點（影像座標）
@@ -401,8 +465,12 @@ class AutoHitVisionNode(Node):
             elif self.seq_phase == 'IDLE':
                 ix, iy = self.target_points_img[self.hit_index]
                 wx, wy = self.image_to_workspace(ix, iy)
-                self.coordinates_pub.publish(String(data=f"{wx:.2f},{wy:.2f}"))
-                self.get_logger().info(f'[MOVE] to point {self.hit_index+1}/3 -> {wx:.2f},{wy:.2f}')
+                # 邊界檢查（超界不發布）
+                if (self.workspace_x_min <= wx <= self.workspace_x_max) and (self.workspace_y_min <= wy <= self.workspace_y_max):
+                    self.coordinates_pub.publish(String(data=f"{wx:.2f},{wy:.2f}"))
+                    self.get_logger().info(f'[MOVE] to point {self.hit_index+1}/3 -> {wx:.2f},{wy:.2f}')
+                else:
+                    self.get_logger().warn(f'[SKIP] point out of workspace: {wx:.2f},{wy:.2f}')
                 self.seq_phase = 'MOVING'
                 self.cmd_time = time.time()
 

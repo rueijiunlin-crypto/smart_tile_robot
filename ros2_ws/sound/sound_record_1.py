@@ -57,6 +57,7 @@ class AudioRecorderNode(Node):
         self.CHANNELS = 1                # 單聲道
         self.RATE = 44100                # 取樣率：44.1kHz
         self.CHUNK = 1024                # 緩衝區大小
+        self.RECORD_SECONDS = 0.4        # 固定錄音時長（秒）
         self.audio = pyaudio.PyAudio()   # 初始化PyAudio
 
     def start_recording(self):
@@ -103,7 +104,11 @@ class AudioRecorderNode(Node):
                                      frames_per_buffer=self.CHUNK)
 
             frames = []
-            while self.is_recording:
+            # 固定錄音時長（不再依賴外部 stop 指令）
+            total_iters = int(self.RATE / self.CHUNK * self.RECORD_SECONDS)
+            for _ in range(total_iters):
+                if not self.is_recording:
+                    break
                 data = stream.read(self.CHUNK, exception_on_overflow=False)
                 frames.append(data)
 
@@ -118,6 +123,8 @@ class AudioRecorderNode(Node):
             wave_file.close()
 
             self.get_logger().info(f'Recording saved as {filename}')
+            # 自動結束錄音狀態
+            self.is_recording = False
 
         except Exception as e:
             self.get_logger().error(f"Recording error: {e}")
@@ -135,7 +142,8 @@ class AudioRecorderNode(Node):
             self._parse_hit_sequence(msg.data)
             self.start_recording()
         elif 'stop_recording' in msg.data:
-            self.stop_recording()
+            # 兼容舊流程：忽略外部停止（固定 0.4 秒自動結束）
+            pass
     
     def _parse_hit_sequence(self, message):
         """

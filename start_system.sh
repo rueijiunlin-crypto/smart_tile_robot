@@ -144,16 +144,37 @@ if ! kill -0 $VISION_PID 2>/dev/null; then
     exit 1
 fi
 
+# 啟動聲音推論節點（ros2_ws/sound/sound_inference_node.py）
+echo "啟動聲音推論節點..."
+# 檢查模型檔是否存在
+SOUND_DIR="ros2_ws/sound"
+MODEL_FILE="$SOUND_DIR/tflite-model/model.tflite"
+if [ ! -f "$MODEL_FILE" ]; then
+    echo "警告：找不到模型檔 $MODEL_FILE，推論節點仍會啟動但可能無法運作。" | tee -a "$LOG_FILE"
+fi
+python3 ros2_ws/sound/sound_inference_node.py &
+INFER_PID=$!
+echo "聲音推論節點 PID: $INFER_PID"
+
+# 檢查推論節點是否成功啟動
+sleep 2
+if ! kill -0 $INFER_PID 2>/dev/null; then
+    echo "錯誤：聲音推論節點啟動失敗！"
+    # 不中斷整體系統，但提示使用者
+fi
+
 echo "=== 系統啟動完成 ==="
 echo "系統狀態："
 echo "  音訊節點：PID $SOUND_PID"
 echo "  視覺節點：PID $VISION_PID"
+echo "  聲音推論：PID ${INFER_PID:-N/A}"
 echo "  micro-ROS：PID $MICRO_ROS_PID"
 echo ""
 echo "可用指令："
 echo "  監控座標：ros2 topic echo /World_Coordinates"
 echo "  監控狀態：ros2 topic echo /vision_status"
 echo "  監控錄音：ros2 topic echo /moveknock_locate_node"
+echo "  監控推論：ros2 topic echo /tile_sound_result"
 echo "  鍵盤控制：python3 hit/keyboard_sender_loop.py"
 echo "  系統配置：ros2 topic echo /system_config"
 echo "  ESP32狀態：ros2 topic echo /move_hit_initialized"
@@ -170,7 +191,7 @@ echo "日誌檔案：$LOG_FILE"
 echo "按 Ctrl+C 停止系統"
 
 # 等待用戶中斷
-trap 'echo "正在停止系統..."; echo "結束時間：$(date)" | tee -a "$LOG_FILE"; kill $SOUND_PID $VISION_PID $MICRO_ROS_PID 2>/dev/null; echo "系統已停止" | tee -a "$LOG_FILE"; exit 0' INT TERM
+trap 'echo "正在停止系統..."; echo "結束時間：$(date)" | tee -a "$LOG_FILE"; kill $SOUND_PID $VISION_PID ${INFER_PID:-} $MICRO_ROS_PID 2>/dev/null; echo "系統已停止" | tee -a "$LOG_FILE"; exit 0' INT TERM
 
 # 保持腳本運行並監控系統狀態
 while true; do
@@ -181,6 +202,9 @@ while true; do
     
     if ! kill -0 $VISION_PID 2>/dev/null; then
         echo "警告：視覺節點已停止！" | tee -a "$LOG_FILE"
+    fi
+    if [ -n "${INFER_PID:-}" ] && ! kill -0 $INFER_PID 2>/dev/null; then
+        echo "警告：聲音推論節點已停止！" | tee -a "$LOG_FILE"
     fi
     
     if ! kill -0 $MICRO_ROS_PID 2>/dev/null; then

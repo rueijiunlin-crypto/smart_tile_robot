@@ -55,8 +55,12 @@ class AudioRecorderNode(Node):
         # 初始化音訊參數
         self.FORMAT = pyaudio.paInt16    # 音訊格式：16位元整數
         self.CHANNELS = 1                # 單聲道
-        self.RATE = 44100                # 取樣率：44.1kHz
+        self.RATE = 16000                # 取樣率：16kHz（與模型一致）
         self.CHUNK = 1024                # 緩衝區大小
+<<<<<<< HEAD
+=======
+        self.RECORD_SECONDS = 1.0        # 固定錄音時長（秒，與模型一致）
+>>>>>>> 413f2bd (1104更新)
         self.audio = pyaudio.PyAudio()   # 初始化PyAudio
 
     def start_recording(self):

@@ -1,0 +1,15 @@
+# Python 依賴套件
+# 注意：NumPy 必須 < 2.0（與 tflite_runtime 和 OpenCV 相容）
+numpy<2.0
+soundfile>=0.12.0
+pyaudio>=0.2.11
+opencv-python>=4.5.0
+pyrealsense2>=2.54.0
+
+# TensorFlow Lite Runtime（根據平台選擇）
+# x86_64 Linux:
+# tflite-runtime>=2.13.0
+# 或從 https://www.tensorflow.org/lite/guide/python 下載適合的 wheel
+
+# ROS2 相關套件由 ROS2 安裝提供，不需在此列出
+

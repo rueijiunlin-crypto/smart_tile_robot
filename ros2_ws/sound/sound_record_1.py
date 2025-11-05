@@ -184,9 +184,15 @@ def main(args=None):
         rclpy.spin(audio_recorder_node)
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        audio_recorder_node.get_logger().error(f"節點執行錯誤: {e}")
     finally:
-        audio_recorder_node.destroy_node()
-        rclpy.shutdown()
+        try:
+            audio_recorder_node.destroy_node()
+        except Exception:
+            pass
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

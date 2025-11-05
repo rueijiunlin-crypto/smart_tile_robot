@@ -132,14 +132,22 @@ fi
 
 # 啟動視覺識別節點
 echo "啟動視覺識別節點..."
-python3 ros2_ws/realsence/realsence_auto_hit.py &
+# 先檢查 Python 依賴
+python3 -c "import cv2; import numpy; print(f'✅ OpenCV: {cv2.__version__}, NumPy: {numpy.__version__}')" 2>&1
+if [ $? -ne 0 ]; then
+    echo "錯誤：Python 依賴檢查失敗！請確認 cv2 和 numpy 已正確安裝。" | tee -a "$LOG_FILE"
+    echo "建議執行：pip3 install 'numpy<2' opencv-python" | tee -a "$LOG_FILE"
+    kill $SOUND_PID 2>/dev/null
+    exit 1
+fi
+python3 ros2_ws/realsence/realsence_auto_hit.py >> "$LOG_FILE" 2>&1 &
 VISION_PID=$!
 echo "視覺識別節點 PID: $VISION_PID"
 
 # 檢查視覺節點是否成功啟動
 sleep 2
 if ! kill -0 $VISION_PID 2>/dev/null; then
-    echo "錯誤：視覺識別節點啟動失敗！"
+    echo "錯誤：視覺識別節點啟動失敗！請檢查日誌：$LOG_FILE" | tee -a "$LOG_FILE"
     kill $SOUND_PID 2>/dev/null
     exit 1
 fi

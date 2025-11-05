@@ -14,7 +14,7 @@ from tflite_runtime.interpreter import Interpreter
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(_SCRIPT_DIR, 'tflite-model', 'model.tflite')
 RECORDINGS_ROOT = os.path.join(_SCRIPT_DIR, 'recordings')
-LABELS = ["normal", "broken"]  # 依照你的 Edge Impulse 模型
+LABELS = ["normal", "broken"]  # 依照 Edge Impulse 模型
 
 
 # === 工具函式：重取樣到指定長度 ===
@@ -223,9 +223,15 @@ def main(args=None):
         rclpy.spin(node)
     except KeyboardInterrupt:
         node.get_logger().info("🛑 結束 Sound Inference Node")
+    except Exception as e:
+        node.get_logger().error(f"節點執行錯誤: {e}")
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

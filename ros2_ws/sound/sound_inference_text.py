@@ -23,14 +23,12 @@ class SoundInferenceNode(Node):
         self.publisher_ = self.create_publisher(String, '/tile_sound_result', 10)
         self.get_logger().info("✅ Sound Inference Node 啟動")
 
-        # 鎖定此次啟動要掃描的錄音資料夾（選 recordings/ 下最新建立的資料夾）
-        self.record_dir = self._pick_latest_recording_dir()
-        if self.record_dir is None:
-            # 若沒有子資料夾，則使用根目錄（仍可處理直接放在 recordings/ 的檔案）
-            self.record_dir = RECORDINGS_ROOT
-            self.get_logger().warn(f"未找到時間戳錄音資料夾，退回掃描根目錄：{self.record_dir}")
-        else:
-            self.get_logger().info(f" 本次僅掃描此資料夾：{self.record_dir}")
+        # 測試模式：直接掃描 recordings 根目錄內所有 wav
+        self.record_dir = RECORDINGS_ROOT
+        if not os.path.isdir(self.record_dir):
+            os.makedirs(self.record_dir, exist_ok=True)
+            self.get_logger().warn(f"recordings 目錄不存在，已建立：{self.record_dir}")
+        self.get_logger().info(f"📂 目前掃描整個 recordings 目錄：{self.record_dir}")
 
         # 結果 CSV 儲存在同一資料夾
         self.result_csv = os.path.join(self.record_dir, 'inference_results.csv')
@@ -41,7 +39,7 @@ class SoundInferenceNode(Node):
         self.input_details = self.interpreter.get_input_details()
         self.output_details = self.interpreter.get_output_details()
 
-        # 模型 I/O 型態與量化參數（本次模型為 int8 量化）
+        # 本測試腳本鎖定 int8 模型
         self.input_dtype = self.input_details[0]['dtype']
         self.output_dtype = self.output_details[0]['dtype']
         if self.input_dtype != np.int8:

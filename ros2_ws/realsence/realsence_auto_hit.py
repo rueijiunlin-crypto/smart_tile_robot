@@ -62,10 +62,10 @@ class AutoHitVisionNode(Node):
         self.image_width = 640
         self.image_height = 480
         # 對應 ESP32 工作範圍（mm 或 cm）
-        self.workspace_x_min = 0.0
-        self.workspace_x_max = 350.0
-        self.workspace_y_min = 0.0
-        self.workspace_y_max = 140.0
+        self.workspace_x_min = 155.0
+        self.workspace_x_max = self.workspace_x_min + 260.0  # 155 → 415 mm
+        self.workspace_y_min = 295.0
+        self.workspace_y_max = self.workspace_y_min + 96.0   # 295 → 391 mm
 
         # ======================== 單應性（平面校正） ========================
         self.homography_H = None                 # 3x3 單應性矩陣（像素 → 世界mm）

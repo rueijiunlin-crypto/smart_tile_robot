@@ -17,18 +17,6 @@ RECORDINGS_ROOT = os.path.join(_SCRIPT_DIR, 'recordings')
 LABELS = ["normal", "broken"]  # 依照 Edge Impulse 模型
 
 
-# === 工具函式：重取樣到指定長度 ===
-def _resample_to_len(signal: np.ndarray, dst_len: int) -> np.ndarray:
-    if signal.ndim > 1:
-        signal = signal[:, 0]
-    if len(signal) == 0:
-        return np.zeros(dst_len, dtype=np.float32)
-    src_idx = np.linspace(0, len(signal) - 1, num=len(signal), dtype=np.float64)
-    dst_idx = np.linspace(0, len(signal) - 1, num=dst_len, dtype=np.float64)
-    out = np.interp(dst_idx, src_idx, signal.astype(np.float32))
-    return out.astype(np.float32)
-
-
 class SoundInferenceNode(Node):
     def __init__(self):
         super().__init__('sound_inference_node')
@@ -103,32 +91,16 @@ class SoundInferenceNode(Node):
     # === 執行模型推論 ===
     def classify_wav(self, wav_path):
         data, fs = sf.read(wav_path)
-        # 讀取音訊資料；若取樣率非 16kHz，或長度不是 16000，就自動轉成 16kHz/1秒
         data = np.asarray(data, dtype=np.float32)
-        if fs != 16000:
-            # 先將原始資料等長重取樣到對應的 1 秒 16000 樣本（以內容長度比例縮放）
-            duration_s = len(data) / float(max(1, fs))
-            target_len = 16000 if duration_s >= 1.0 else int(16000 * duration_s)
-            data = _resample_to_len(data, max(target_len, 1))
-            # 若仍不足 16000，補零到 16000；若超過，截斷
-            if len(data) < 16000:
-                padded = np.zeros(16000, dtype=np.float32)
-                padded[:len(data)] = data
-                data = padded
-            else:
-                data = data[:16000]
-            self.get_logger().info(f"已自動將 {os.path.basename(wav_path)} 轉成 16kHz/1s 供模型使用")
-        else:
-            # 16kHz → 取前 1 秒，不足補零
-            if len(data) < 16000:
-                padded = np.zeros(16000, dtype=np.float32)
-                padded[:len(data)] = data
-                data = padded
-            else:
-                data = data[:16000]
+        if data.ndim > 1:
+            data = data[:, 0]
+        if fs != 44100:
+            self.get_logger().warn(
+                f"⚠️ {os.path.basename(wav_path)} 取樣率為 {fs}Hz，預期為 44100Hz；將直接使用原始資料"
+            )
         
-        # 將 16000 樣本降採樣或截取到模型期望的長度（例如 650）
-        # 方法：平均降採樣（簡單線性插值）
+        # 將音訊調整至模型期望的長度（例如 650）
+        # 方法：線性插值或補零
         if len(data) > self.input_length:
             indices = np.linspace(0, len(data) - 1, self.input_length)
             data = np.interp(indices, np.arange(len(data)), data)

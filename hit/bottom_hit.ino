@@ -58,8 +58,10 @@
  // ===================== 步進參數 =====================
  const float steps_per_rotation = 200.0f * 16.0f;  // 1/16 微步
  const float hit_of_circle      = 14.0f;           // 絲桿或皮帶每圈距離(mm)
- const float max_x              = 350.0f;
- const float max_y              = 140.0f;
+const float max_x              = 260.0f;
+const float max_y              = 96.0f;
+const float world_offset_x     = 155.0f;
+const float world_offset_y     = 295.0f;
  
  // ===================== 位置 =====================
  float current_x = 0.0f;
@@ -240,7 +242,11 @@ void publish_position_now() {
  void subscription_coordinates_callback(const void *msgin) {
    const std_msgs__msg__String *msg = (const std_msgs__msg__String *)msgin;
    float x, y;
-   if (sscanf(msg->data.data, "%f,%f", &x, &y) == 2) moveToTarget(x, y);
+  if (sscanf(msg->data.data, "%f,%f", &x, &y) == 2) {
+    float local_x = x - world_offset_x;
+    float local_y = y - world_offset_y;
+    moveToTarget(local_x, local_y);
+  }
  }
  void subscription_top_base_locate_callback(const void *msgin) {
    const std_msgs__msg__String *msg = (const std_msgs__msg__String *)msgin;

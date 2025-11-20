@@ -168,9 +168,25 @@ void initializeHitMotor() {
   
  // ===================== 移動控制 =====================
  void moveToTarget(float target_x, float target_y) {
-   if (target_x < 0.0f || target_x > max_x || target_y < 0.0f || target_y > max_y) return;
+   if (target_x < 0.0f || target_x > max_x || target_y < 0.0f || target_y > max_y) {
+     Serial.print("moveToTarget 拒絕: 座標超出範圍 (");
+     Serial.print(target_x, 2);
+     Serial.print(", ");
+     Serial.print(target_y, 2);
+     Serial.println(")");
+     return;
+   }
  
   set_status("moving");
+  Serial.print("開始移動: 從 (");
+  Serial.print(current_x, 2);
+  Serial.print(", ");
+  Serial.print(current_y, 2);
+  Serial.print(") 到 (");
+  Serial.print(target_x, 2);
+  Serial.print(", ");
+  Serial.print(target_y, 2);
+  Serial.println(")");
 
    float x_steps_f = (target_x - current_x) * (steps_per_rotation / hit_of_circle);
    float y_steps_f = (target_y - current_y) * (steps_per_rotation / hit_of_circle);
@@ -242,11 +258,37 @@ void publish_position_now() {
  void subscription_coordinates_callback(const void *msgin) {
    const std_msgs__msg__String *msg = (const std_msgs__msg__String *)msgin;
    float x, y;
-  if (sscanf(msg->data.data, "%f,%f", &x, &y) == 2) {
-    float local_x = x - world_offset_x;
-    float local_y = y - world_offset_y;
-    moveToTarget(local_x, local_y);
-  }
+   int parsed = sscanf(msg->data.data, "%f,%f", &x, &y);
+   if (parsed == 2) {
+     float local_x = x - world_offset_x;
+     float local_y = y - world_offset_y;
+     Serial.print("收到世界座標: (");
+     Serial.print(x, 2);
+     Serial.print(", ");
+     Serial.print(y, 2);
+     Serial.print(") -> 本地座標: (");
+     Serial.print(local_x, 2);
+     Serial.print(", ");
+     Serial.print(local_y, 2);
+     Serial.println(")");
+     
+     // 檢查轉換後的座標是否在範圍內
+     if (local_x < 0.0f || local_x > max_x || local_y < 0.0f || local_y > max_y) {
+       Serial.print("錯誤: 本地座標超出範圍! 範圍: X[0, ");
+       Serial.print(max_x);
+       Serial.print("], Y[0, ");
+       Serial.print(max_y);
+       Serial.println("]");
+       return;
+     }
+     
+     moveToTarget(local_x, local_y);
+   } else {
+     Serial.print("座標解析失敗! 收到: '");
+     Serial.print(msg->data.data);
+     Serial.print("', 解析結果: ");
+     Serial.println(parsed);
+   }
  }
  void subscription_top_base_locate_callback(const void *msgin) {
    const std_msgs__msg__String *msg = (const std_msgs__msg__String *)msgin;

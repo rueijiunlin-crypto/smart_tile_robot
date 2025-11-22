@@ -1,0 +1,27 @@
+timestamp,filepath,label,confidence,dsp_time_ms,classification_time_ms,total_time_ms
+2025-11-22 11:32:39,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/14.wav,bad,1.0000,7,3,10
+2025-11-22 11:32:39,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/10.wav,bad,1.0000,7,6,13
+2025-11-22 11:32:39,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/9.wav,bad,1.0000,16,7,23
+2025-11-22 11:32:39,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/70.wav,good,0.9963,13,6,19
+2025-11-22 11:32:39,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/66.wav,good,0.9952,13,6,19
+2025-11-22 11:32:39,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/71.wav,good,0.9993,15,7,22
+2025-11-22 11:32:39,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/68.wav,good,0.9988,17,10,27
+2025-11-22 11:32:39,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/69.wav,good,0.9999,23,8,31
+2025-11-22 11:32:39,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/13.wav,bad,1.0000,19,7,26
+2025-11-22 11:32:39,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/11.wav,bad,1.0000,19,7,26
+2025-11-22 11:32:39,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/72.wav,good,0.9996,16,8,24
+2025-11-22 11:32:39,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/12.wav,bad,1.0000,14,6,20
+2025-11-22 11:32:40,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/67.wav,good,0.9988,17,6,23
+2025-11-22 11:32:50,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/14.wav,bad,1.0000,9,3,12
+2025-11-22 11:32:50,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/10.wav,bad,1.0000,7,3,10
+2025-11-22 11:32:50,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/9.wav,bad,1.0000,7,3,10
+2025-11-22 11:32:50,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/70.wav,good,0.9963,8,3,11
+2025-11-22 11:32:50,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/66.wav,good,0.9952,8,3,11
+2025-11-22 11:32:50,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/71.wav,good,0.9993,7,3,10
+2025-11-22 11:32:50,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/68.wav,good,0.9988,7,3,10
+2025-11-22 11:32:50,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/69.wav,good,0.9999,7,3,10
+2025-11-22 11:32:50,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/13.wav,bad,1.0000,7,3,10
+2025-11-22 11:32:50,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/11.wav,bad,1.0000,6,3,9
+2025-11-22 11:32:50,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/72.wav,good,0.9996,5,3,8
+2025-11-22 11:32:50,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/12.wav,bad,1.0000,7,3,10
+2025-11-22 11:32:50,/home/richlin0308/114/ros2_ws/sound/recordings/20251122_112735/67.wav,good,0.9988,8,3,11

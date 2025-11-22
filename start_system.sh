@@ -171,6 +171,39 @@ if ! kill -0 $INFER_PID 2>/dev/null; then
     # 不中斷整體系統，但提示使用者
 fi
 
+# 檢查並編譯 C++ 推論程式（如果需要）
+echo "檢查 C++ 推論程式..."
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+INFERENCE_V3_DIR="$SCRIPT_DIR/ros2_ws/sound/inference/inferencing_v3"
+INFERENCE_LATEST="$INFERENCE_V3_DIR/build/inference_latest"
+RECORDINGS_DIR="$SCRIPT_DIR/ros2_ws/sound/recordings"
+
+if [ ! -f "$INFERENCE_LATEST" ]; then
+    echo "編譯 C++ 推論程式..."
+    if [ -d "$INFERENCE_V3_DIR" ] && [ -f "$INFERENCE_V3_DIR/build.sh" ]; then
+        cd "$INFERENCE_V3_DIR"
+        bash build.sh >> "$LOG_FILE" 2>&1
+        if [ $? -ne 0 ]; then
+            echo "警告：C++ 推論程式編譯失敗，將跳過自動推論功能" | tee -a "$LOG_FILE"
+            INFERENCE_ENABLED=false
+        else
+            echo "✅ C++ 推論程式編譯成功" | tee -a "$LOG_FILE"
+        fi
+        cd "$SCRIPT_DIR"
+    else
+        echo "警告：找不到 C++ 推論程式目錄，將跳過自動推論功能" | tee -a "$LOG_FILE"
+        INFERENCE_ENABLED=false
+    fi
+else
+    echo "✅ C++ 推論程式已就緒" | tee -a "$LOG_FILE"
+fi
+
+# 設定推論相關變數
+if [ -z "${INFERENCE_ENABLED:-}" ]; then
+    INFERENCE_ENABLED=true
+fi
+INFERENCE_INTERVAL=30  # 推論間隔（秒）
+
 echo "=== 系統啟動完成 ==="
 echo "系統狀態："
 echo "  音訊節點：PID $SOUND_PID"
@@ -199,9 +232,65 @@ echo "日誌檔案：$LOG_FILE"
 echo "按 Ctrl+C 停止系統"
 
 # 等待用戶中斷
-trap 'echo "正在停止系統..."; echo "結束時間：$(date)" | tee -a "$LOG_FILE"; kill $SOUND_PID $VISION_PID ${INFER_PID:-} $MICRO_ROS_PID 2>/dev/null; echo "系統已停止" | tee -a "$LOG_FILE"; exit 0' INT TERM
+trap 'echo "正在停止系統..."; echo "結束時間：$(date)" | tee -a "$LOG_FILE"; 
+    # 執行最後一次推論
+    if [ "$INFERENCE_ENABLED" = true ] && [ -f "$INFERENCE_LATEST" ]; then
+        echo "" | tee -a "$LOG_FILE"
+        echo "========================================" | tee -a "$LOG_FILE"
+        echo "執行最終推論..." | tee -a "$LOG_FILE"
+        echo "========================================" | tee -a "$LOG_FILE"
+        INFERENCE_OUTPUT=$("$INFERENCE_LATEST" --recordings-dir "$RECORDINGS_DIR" 2>&1)
+        INFERENCE_EXIT_CODE=$?
+        echo "$INFERENCE_OUTPUT" | tee -a "$LOG_FILE"
+        if [ $INFERENCE_EXIT_CODE -eq 0 ]; then
+            PROCESSED_COUNT=$(echo "$INFERENCE_OUTPUT" | grep -oP "處理完成：成功 \K\d+" || echo "0")
+            echo "" | tee -a "$LOG_FILE"
+            echo "========================================" | tee -a "$LOG_FILE"
+            echo "✅ 最終推論成功完成！" | tee -a "$LOG_FILE"
+            if [ -n "$PROCESSED_COUNT" ] && [ "$PROCESSED_COUNT" != "0" ]; then
+                echo "   處理檔案數：$PROCESSED_COUNT 個" | tee -a "$LOG_FILE"
+            fi
+            echo "========================================" | tee -a "$LOG_FILE"
+        else
+            echo "" | tee -a "$LOG_FILE"
+            echo "⚠️  最終推論失敗" | tee -a "$LOG_FILE"
+        fi
+    fi
+    kill $SOUND_PID $VISION_PID ${INFER_PID:-} $MICRO_ROS_PID 2>/dev/null; 
+    echo "系統已停止" | tee -a "$LOG_FILE"; 
+    exit 0' INT TERM
+
+# 等待一段時間讓音訊開始錄製
+echo "等待音訊錄製初始化..."
+sleep 5
+
+# 執行第一次推論（處理已存在的音訊）
+if [ "$INFERENCE_ENABLED" = true ] && [ -f "$INFERENCE_LATEST" ]; then
+    echo "========================================" | tee -a "$LOG_FILE"
+    echo "執行初始推論..." | tee -a "$LOG_FILE"
+    echo "========================================" | tee -a "$LOG_FILE"
+    INFERENCE_OUTPUT=$("$INFERENCE_LATEST" --recordings-dir "$RECORDINGS_DIR" 2>&1)
+    INFERENCE_EXIT_CODE=$?
+    echo "$INFERENCE_OUTPUT" | tee -a "$LOG_FILE"
+    
+    if [ $INFERENCE_EXIT_CODE -eq 0 ]; then
+        # 提取處理的檔案數量
+        PROCESSED_COUNT=$(echo "$INFERENCE_OUTPUT" | grep -oP "處理完成：成功 \K\d+" || echo "0")
+        echo "" | tee -a "$LOG_FILE"
+        echo "========================================" | tee -a "$LOG_FILE"
+        echo "✅ 初始推論成功完成！" | tee -a "$LOG_FILE"
+        if [ -n "$PROCESSED_COUNT" ] && [ "$PROCESSED_COUNT" != "0" ]; then
+            echo "   處理檔案數：$PROCESSED_COUNT 個" | tee -a "$LOG_FILE"
+        fi
+        echo "========================================" | tee -a "$LOG_FILE"
+    else
+        echo "" | tee -a "$LOG_FILE"
+        echo "⚠️  初始推論失敗，將繼續定期推論" | tee -a "$LOG_FILE"
+    fi
+fi
 
 # 保持腳本運行並監控系統狀態
+INFERENCE_COUNTER=0
 while true; do
     # 檢查所有進程是否還在運行
     if ! kill -0 $SOUND_PID 2>/dev/null; then
@@ -217,6 +306,39 @@ while true; do
     
     if ! kill -0 $MICRO_ROS_PID 2>/dev/null; then
         echo "警告：micro-ROS agent 已停止！" | tee -a "$LOG_FILE"
+    fi
+    
+    # 定期執行推論
+    if [ "$INFERENCE_ENABLED" = true ] && [ -f "$INFERENCE_LATEST" ]; then
+        INFERENCE_COUNTER=$((INFERENCE_COUNTER + 10))
+        if [ $INFERENCE_COUNTER -ge $INFERENCE_INTERVAL ]; then
+            INFERENCE_COUNTER=0
+            echo "" | tee -a "$LOG_FILE"
+            echo "[$(date +%H:%M:%S)] ========================================" | tee -a "$LOG_FILE"
+            echo "[$(date +%H:%M:%S)] 執行定期推論..." | tee -a "$LOG_FILE"
+            echo "[$(date +%H:%M:%S)] ========================================" | tee -a "$LOG_FILE"
+            INFERENCE_OUTPUT=$("$INFERENCE_LATEST" --recordings-dir "$RECORDINGS_DIR" 2>&1)
+            INFERENCE_EXIT_CODE=$?
+            echo "$INFERENCE_OUTPUT" | tee -a "$LOG_FILE"
+            
+            if [ $INFERENCE_EXIT_CODE -eq 0 ]; then
+                # 提取處理的檔案數量
+                PROCESSED_COUNT=$(echo "$INFERENCE_OUTPUT" | grep -oP "處理完成：成功 \K\d+" || echo "0")
+                SKIPPED_COUNT=$(echo "$INFERENCE_OUTPUT" | grep -c "所有 WAV 檔案都已經處理過" || echo "0")
+                echo "" | tee -a "$LOG_FILE"
+                echo "[$(date +%H:%M:%S)] ========================================" | tee -a "$LOG_FILE"
+                echo "[$(date +%H:%M:%S)] ✅ 定期推論成功完成！" | tee -a "$LOG_FILE"
+                if [ "$SKIPPED_COUNT" -gt 0 ]; then
+                    echo "[$(date +%H:%M:%S)]   狀態：所有檔案已處理，無新檔案" | tee -a "$LOG_FILE"
+                elif [ -n "$PROCESSED_COUNT" ] && [ "$PROCESSED_COUNT" != "0" ]; then
+                    echo "[$(date +%H:%M:%S)]   處理檔案數：$PROCESSED_COUNT 個" | tee -a "$LOG_FILE"
+                fi
+                echo "[$(date +%H:%M:%S)] ========================================" | tee -a "$LOG_FILE"
+            else
+                echo "" | tee -a "$LOG_FILE"
+                echo "[$(date +%H:%M:%S)] ⚠️  定期推論失敗" | tee -a "$LOG_FILE"
+            fi
+        fi
     fi
     
     sleep 10

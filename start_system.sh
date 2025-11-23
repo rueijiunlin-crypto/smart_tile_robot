@@ -5,8 +5,9 @@
 
 echo "=== 自動化敲擊錄音系統啟動 ==="
 
-# 創建日誌目錄
-LOG_DIR="logs"
+# 創建日誌目錄（使用絕對路徑）
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_DIR="$SCRIPT_DIR/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/system_$(date +%Y%m%d_%H%M%S).log"
 
@@ -156,7 +157,7 @@ fi
 echo "========================================"
 echo "檢查 C++ 推論程式..."
 echo "========================================"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# SCRIPT_DIR 已在前面定義，這裡不需要重複定義
 INFERENCE_V3_DIR="$SCRIPT_DIR/ros2_ws/sound/inference/inferencing_v3"
 INFERENCE_LATEST="$INFERENCE_V3_DIR/build/inference_latest"
 RECORDINGS_DIR="$SCRIPT_DIR/ros2_ws/sound/recordings"

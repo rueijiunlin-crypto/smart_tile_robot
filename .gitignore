@@ -24,7 +24,7 @@ CTestTestfile.cmake
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
-Makefile
+
 
 # VSCode / CLion / IDE configs
 .vscode/

@@ -92,18 +92,20 @@ class AudioRecorderNode(Node):
             remaining_samples = int(self.RATE * self.RECORDING_DURATION) % self.CHUNK
             
             self.get_logger().info(f"開始錄音，目標時長: {self.RECORDING_DURATION} 秒 ({total_chunks} 個完整 CHUNK + {remaining_samples} 個樣本)")
+            self.get_logger().info(f"注意：錄音將固定錄製 {self.RECORDING_DURATION} 秒，不受 stop_recording 訊息影響")
 
-            # 錄製完整的 CHUNK
+            # 錄製完整的 CHUNK（固定時長，不受 is_recording 標誌影響）
             for i in range(total_chunks):
-                if not self.is_recording:
-                    break
                 data = stream.read(self.CHUNK, exception_on_overflow=False)
                 frames.append(data)
 
             # 錄製剩餘的樣本（如果有的話）
-            if remaining_samples > 0 and self.is_recording:
+            if remaining_samples > 0:
                 data = stream.read(remaining_samples, exception_on_overflow=False)
                 frames.append(data)
+            
+            # 錄音完成後，重置 is_recording 標誌
+            self.is_recording = False
 
             stream.stop_stream()
             stream.close()

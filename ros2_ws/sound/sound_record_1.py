@@ -45,6 +45,7 @@ class AudioRecorderNode(Node):
         self.CHANNELS = 1
         self.RATE = 44100
         self.CHUNK = 1024
+        self.RECORDING_DURATION = 1.4  # 錄音時長（秒）- 對應模型要求的 61740 個樣本
         self.audio = pyaudio.PyAudio()
 
     # -------------------------------------------------------------
@@ -85,8 +86,23 @@ class AudioRecorderNode(Node):
             )
 
             frames = []
-            while self.is_recording:
+            # 計算需要錄製的 CHUNK 數量
+            total_chunks = int(self.RATE / self.CHUNK * self.RECORDING_DURATION)
+            # 計算剩餘樣本數（用於最後一個不完整的 CHUNK）
+            remaining_samples = int(self.RATE * self.RECORDING_DURATION) % self.CHUNK
+            
+            self.get_logger().info(f"開始錄音，目標時長: {self.RECORDING_DURATION} 秒 ({total_chunks} 個完整 CHUNK + {remaining_samples} 個樣本)")
+
+            # 錄製完整的 CHUNK
+            for i in range(total_chunks):
+                if not self.is_recording:
+                    break
                 data = stream.read(self.CHUNK, exception_on_overflow=False)
+                frames.append(data)
+
+            # 錄製剩餘的樣本（如果有的話）
+            if remaining_samples > 0 and self.is_recording:
+                data = stream.read(remaining_samples, exception_on_overflow=False)
                 frames.append(data)
 
             stream.stop_stream()
@@ -99,7 +115,11 @@ class AudioRecorderNode(Node):
                 wf.setframerate(self.RATE)
                 wf.writeframes(b''.join(frames))
 
-            self.get_logger().info(f"Recording saved as {filename}")
+            # 計算實際錄製的樣本數
+            total_samples = sum(len(frame) // 2 for frame in frames)  # 每個樣本是 2 bytes (Int16)
+            actual_duration = total_samples / self.RATE
+            
+            self.get_logger().info(f"錄音完成: {filename}, 實際時長: {actual_duration:.3f} 秒 ({total_samples} 個樣本)")
 
         except Exception as e:
             self.get_logger().error(f"Recording error: {e}")

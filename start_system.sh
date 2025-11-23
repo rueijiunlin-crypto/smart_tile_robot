@@ -169,9 +169,15 @@ if [ ! -d "$INFERENCE_V3_DIR" ]; then
     INFERENCE_ENABLED=false
 elif [ ! -f "$INFERENCE_LATEST" ]; then
     # 需要編譯
+    # 確保日誌檔案存在（使用絕對路徑，在 cd 之前執行）
+    mkdir -p "$(dirname "$LOG_FILE")"
+    touch "$LOG_FILE" 2>/dev/null || true
     echo "編譯 C++ 推論程式..." | tee -a "$LOG_FILE"
     if [ -f "$INFERENCE_V3_DIR/build.sh" ]; then
         cd "$INFERENCE_V3_DIR"
+        # 再次確保日誌檔案存在（使用絕對路徑）
+        mkdir -p "$(dirname "$LOG_FILE")"
+        touch "$LOG_FILE" 2>/dev/null || true
         echo "執行編譯指令..." | tee -a "$LOG_FILE"
         if bash build.sh >> "$LOG_FILE" 2>&1; then
             cd "$SCRIPT_DIR"

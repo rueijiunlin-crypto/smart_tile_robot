@@ -152,70 +152,101 @@ if ! kill -0 $VISION_PID 2>/dev/null; then
     exit 1
 fi
 
-# 啟動聲音推論節點（ros2_ws/sound/sound_inference_node.py）
-echo "啟動聲音推論節點..."
-# 檢查模型檔是否存在
-SOUND_DIR="ros2_ws/sound"
-MODEL_FILE="$SOUND_DIR/tflite-model/model.tflite"
-if [ ! -f "$MODEL_FILE" ]; then
-    echo "警告：找不到模型檔 $MODEL_FILE，推論節點仍會啟動但可能無法運作。" | tee -a "$LOG_FILE"
-fi
-python3 ros2_ws/sound/sound_inference_node.py &
-INFER_PID=$!
-echo "聲音推論節點 PID: $INFER_PID"
-
-# 檢查推論節點是否成功啟動
-sleep 2
-if ! kill -0 $INFER_PID 2>/dev/null; then
-    echo "錯誤：聲音推論節點啟動失敗！"
-    # 不中斷整體系統，但提示使用者
-fi
-
-# 檢查並編譯 C++ 推論程式（如果需要）
+# 檢查並編譯 C++ 推論程式（新推論程式）
+echo "========================================"
 echo "檢查 C++ 推論程式..."
+echo "========================================"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INFERENCE_V3_DIR="$SCRIPT_DIR/ros2_ws/sound/inference/inferencing_v3"
 INFERENCE_LATEST="$INFERENCE_V3_DIR/build/inference_latest"
 RECORDINGS_DIR="$SCRIPT_DIR/ros2_ws/sound/recordings"
 
-if [ ! -f "$INFERENCE_LATEST" ]; then
-    echo "編譯 C++ 推論程式..."
-    if [ -d "$INFERENCE_V3_DIR" ] && [ -f "$INFERENCE_V3_DIR/build.sh" ]; then
+# 檢查推論程式目錄是否存在
+if [ ! -d "$INFERENCE_V3_DIR" ]; then
+    echo "❌ 錯誤：找不到 C++ 推論程式目錄：$INFERENCE_V3_DIR" | tee -a "$LOG_FILE"
+    echo "將跳過自動推論功能" | tee -a "$LOG_FILE"
+    INFERENCE_ENABLED=false
+elif [ ! -f "$INFERENCE_LATEST" ]; then
+    # 需要編譯
+    echo "編譯 C++ 推論程式..." | tee -a "$LOG_FILE"
+    if [ -f "$INFERENCE_V3_DIR/build.sh" ]; then
         cd "$INFERENCE_V3_DIR"
-        bash build.sh >> "$LOG_FILE" 2>&1
-        if [ $? -ne 0 ]; then
-            echo "警告：C++ 推論程式編譯失敗，將跳過自動推論功能" | tee -a "$LOG_FILE"
-            INFERENCE_ENABLED=false
+        echo "執行編譯指令..." | tee -a "$LOG_FILE"
+        if bash build.sh >> "$LOG_FILE" 2>&1; then
+            cd "$SCRIPT_DIR"
+            # 再次檢查編譯後的檔案是否存在且可執行
+            if [ -f "$INFERENCE_LATEST" ] && [ -x "$INFERENCE_LATEST" ]; then
+                echo "✅ C++ 推論程式編譯成功並已就緒" | tee -a "$LOG_FILE"
+                INFERENCE_ENABLED=true
+            else
+                echo "❌ 錯誤：編譯完成但找不到可執行檔案：$INFERENCE_LATEST" | tee -a "$LOG_FILE"
+                echo "將跳過自動推論功能" | tee -a "$LOG_FILE"
+                INFERENCE_ENABLED=false
+            fi
         else
-            echo "✅ C++ 推論程式編譯成功" | tee -a "$LOG_FILE"
+            cd "$SCRIPT_DIR"
+            echo "❌ 錯誤：C++ 推論程式編譯失敗" | tee -a "$LOG_FILE"
+            echo "請檢查日誌檔案：$LOG_FILE" | tee -a "$LOG_FILE"
+            echo "將跳過自動推論功能" | tee -a "$LOG_FILE"
+            INFERENCE_ENABLED=false
         fi
-        cd "$SCRIPT_DIR"
     else
-        echo "警告：找不到 C++ 推論程式目錄，將跳過自動推論功能" | tee -a "$LOG_FILE"
+        echo "❌ 錯誤：找不到編譯腳本：$INFERENCE_V3_DIR/build.sh" | tee -a "$LOG_FILE"
+        echo "將跳過自動推論功能" | tee -a "$LOG_FILE"
         INFERENCE_ENABLED=false
     fi
 else
-    echo "✅ C++ 推論程式已就緒" | tee -a "$LOG_FILE"
+    # 檔案已存在，檢查是否可執行
+    if [ -x "$INFERENCE_LATEST" ]; then
+        echo "✅ C++ 推論程式已就緒（可執行檔案存在）" | tee -a "$LOG_FILE"
+        INFERENCE_ENABLED=true
+    else
+        echo "⚠️  警告：推論程式檔案存在但不可執行，嘗試重新編譯..." | tee -a "$LOG_FILE"
+        cd "$INFERENCE_V3_DIR"
+        if [ -f "$INFERENCE_V3_DIR/build.sh" ] && bash build.sh >> "$LOG_FILE" 2>&1; then
+            cd "$SCRIPT_DIR"
+            if [ -f "$INFERENCE_LATEST" ] && [ -x "$INFERENCE_LATEST" ]; then
+                echo "✅ C++ 推論程式重新編譯成功" | tee -a "$LOG_FILE"
+                INFERENCE_ENABLED=true
+            else
+                echo "❌ 錯誤：重新編譯後仍無法執行" | tee -a "$LOG_FILE"
+                INFERENCE_ENABLED=false
+            fi
+        else
+            cd "$SCRIPT_DIR"
+            echo "❌ 錯誤：重新編譯失敗" | tee -a "$LOG_FILE"
+            INFERENCE_ENABLED=false
+        fi
+    fi
 fi
 
-# 設定推論相關變數
-if [ -z "${INFERENCE_ENABLED:-}" ]; then
-    INFERENCE_ENABLED=true
+# 顯示推論程式狀態
+if [ "$INFERENCE_ENABLED" = true ]; then
+    echo "推論程式路徑：$INFERENCE_LATEST" | tee -a "$LOG_FILE"
+    echo "錄音資料夾：$RECORDINGS_DIR" | tee -a "$LOG_FILE"
+    echo "推論間隔：30 秒" | tee -a "$LOG_FILE"
+else
+    echo "⚠️  自動推論功能已停用" | tee -a "$LOG_FILE"
 fi
+echo "========================================"
 INFERENCE_INTERVAL=30  # 推論間隔（秒）
 
 echo "=== 系統啟動完成 ==="
 echo "系統狀態："
 echo "  音訊節點：PID $SOUND_PID"
 echo "  視覺節點：PID $VISION_PID"
-echo "  聲音推論：PID ${INFER_PID:-N/A}"
+if [ "$INFERENCE_ENABLED" = true ]; then
+    echo "  C++ 推論程式：✅ 已就緒（自動執行）"
+else
+    echo "  C++ 推論程式：❌ 未啟用"
+fi
 echo "  micro-ROS：PID $MICRO_ROS_PID"
 echo ""
 echo "可用指令："
 echo "  監控座標：ros2 topic echo /World_Coordinates"
 echo "  監控狀態：ros2 topic echo /vision_status"
 echo "  監控錄音：ros2 topic echo /moveknock_locate_node"
-echo "  監控推論：ros2 topic echo /tile_sound_result"
+echo "  推論結果：查看 recordings 資料夾內的 CSV 檔案"
 echo "  鍵盤控制：python3 hit/keyboard_sender_loop.py"
 echo "  系統配置：ros2 topic echo /system_config"
 echo "  ESP32狀態：ros2 topic echo /move_hit_initialized"
@@ -256,7 +287,7 @@ trap 'echo "正在停止系統..."; echo "結束時間：$(date)" | tee -a "$LOG
             echo "⚠️  最終推論失敗" | tee -a "$LOG_FILE"
         fi
     fi
-    kill $SOUND_PID $VISION_PID ${INFER_PID:-} $MICRO_ROS_PID 2>/dev/null; 
+    kill $SOUND_PID $VISION_PID $MICRO_ROS_PID 2>/dev/null; 
     echo "系統已停止" | tee -a "$LOG_FILE"; 
     exit 0' INT TERM
 
@@ -299,9 +330,6 @@ while true; do
     
     if ! kill -0 $VISION_PID 2>/dev/null; then
         echo "警告：視覺節點已停止！" | tee -a "$LOG_FILE"
-    fi
-    if [ -n "${INFER_PID:-}" ] && ! kill -0 $INFER_PID 2>/dev/null; then
-        echo "警告：聲音推論節點已停止！" | tee -a "$LOG_FILE"
     fi
     
     if ! kill -0 $MICRO_ROS_PID 2>/dev/null; then

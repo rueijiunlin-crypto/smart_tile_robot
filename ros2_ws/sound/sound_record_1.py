@@ -45,7 +45,7 @@ class AudioRecorderNode(Node):
         self.CHANNELS = 1
         self.RATE = 44100
         self.CHUNK = 1024
-        self.RECORDING_DURATION = 1.4  # 錄音時長（秒）- 對應模型要求的 61740 個樣本
+        self.RECORDING_DURATION = 1.401  # 錄音時長（秒）- 對應模型要求的 61740 個樣本
         self.audio = pyaudio.PyAudio()
 
     # -------------------------------------------------------------

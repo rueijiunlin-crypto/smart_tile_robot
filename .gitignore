@@ -4,7 +4,6 @@
 # ===========================================
 
 # Build and install folders
-build/
 install/
 log/
 
@@ -14,7 +13,7 @@ __pycache__/
 *.pyo
 *.pyd
 *.so
-*.o
+
 *.a
 *.out
 
@@ -52,3 +51,21 @@ venv/
 src/uros/micro-ROS-Agent/build/
 src/uros/micro-ROS-Agent/install/
 src/uros/micro-ROS-Agent/log/
+
+# ===========================================
+# 推論程式目錄例外規則（允許所有檔案上傳）
+# ===========================================
+# 允許推論程式目錄中的所有檔案和目錄
+!ros2_ws/sound/inference/inferencing_v3/
+!ros2_ws/sound/inference/inferencing_v3/**
+# 允許推論程式目錄中的 .o 檔案
+!ros2_ws/sound/inference/inferencing_v3/**/*.o
+# 允許推論程式目錄中的 .a 檔案
+!ros2_ws/sound/inference/inferencing_v3/**/*.a
+# 允許推論程式目錄中的 .out 檔案
+!ros2_ws/sound/inference/inferencing_v3/**/*.out
+# 允許推論程式目錄中的 .so 檔案
+!ros2_ws/sound/inference/inferencing_v3/**/*.so
+# 允許推論程式目錄中的 build 目錄
+!ros2_ws/sound/inference/inferencing_v3/build/
+!ros2_ws/sound/inference/inferencing_v3/build/**

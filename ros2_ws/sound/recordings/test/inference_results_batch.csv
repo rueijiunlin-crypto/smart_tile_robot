@@ -1,0 +1,14 @@
+timestamp,filepath,label,confidence,dsp_time_ms,classification_time_ms,total_time_ms
+2025-11-23 11:44:54,../../recordings/test/14.wav,bad,1.0000,4,3,7
+2025-11-23 11:44:54,../../recordings/test/10.wav,bad,1.0000,4,2,6
+2025-11-23 11:44:54,../../recordings/test/9.wav,bad,1.0000,3,1,4
+2025-11-23 11:44:54,../../recordings/test/70.wav,good,0.9963,3,1,4
+2025-11-23 11:44:54,../../recordings/test/66.wav,good,0.9952,3,2,5
+2025-11-23 11:44:54,../../recordings/test/71.wav,good,0.9993,3,2,5
+2025-11-23 11:44:54,../../recordings/test/68.wav,good,0.9988,3,1,4
+2025-11-23 11:44:54,../../recordings/test/69.wav,good,0.9999,4,1,5
+2025-11-23 11:44:54,../../recordings/test/13.wav,bad,1.0000,3,1,4
+2025-11-23 11:44:54,../../recordings/test/11.wav,bad,1.0000,3,1,4
+2025-11-23 11:44:54,../../recordings/test/72.wav,good,0.9996,3,1,4
+2025-11-23 11:44:54,../../recordings/test/12.wav,bad,1.0000,3,1,4
+2025-11-23 11:44:54,../../recordings/test/67.wav,good,0.9988,2,1,3

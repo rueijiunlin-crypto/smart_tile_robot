@@ -56,6 +56,7 @@ float old_L1 = 0.0;
 float old_L2 = 0.0;
 
 
+
 // 檢查坐標是否在範圍內
 bool check_coords_matrix(int x, int y) {
   return (x >= 0 && x <= 79) && (y >= 0 && y <= 49); // 最大範圍 (50,82)

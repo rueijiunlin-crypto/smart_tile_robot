@@ -1,5 +1,4 @@
 timestamp,filepath,label,confidence,dsp_time_ms,classification_time_ms,total_time_ms
-2025/11/23 12:22,/home/ced/Desktop/114/smart_tile_robot/ros2_ws/sound/recordings/20251123_122040/00001.wav,good,0.9777,4,3,7
 2025/11/23 12:28,/home/ced/Desktop/114/smart_tile_robot/ros2_ws/sound/recordings/20251123_122040/00002.wav,bad,1,5,2,7
 2025/11/23 12:29,/home/ced/Desktop/114/smart_tile_robot/ros2_ws/sound/recordings/20251123_122040/00005.wav,bad,1,4,2,6
 2025/11/23 12:29,/home/ced/Desktop/114/smart_tile_robot/ros2_ws/sound/recordings/20251123_122040/00003.wav,bad,1,4,2,6

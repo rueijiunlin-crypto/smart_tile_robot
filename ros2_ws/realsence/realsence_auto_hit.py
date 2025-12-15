@@ -29,11 +29,11 @@ class AutoHitVisionNode(Node):
 
         # ======================== ROS2 Topic ========================
         # 發布目標世界座標
-        self.coordinates_pub = self.create_publisher(String, '/World_Coordinates', 10)
+        #self.coordinates_pub = self.create_publisher(String, '/World_Coordinates', 10)
         # 發布鍵盤模擬控制（如 t/h/n/e）
-        self.keyboard_pub    = self.create_publisher(String, '/keyboard_control', 10)
+        #self.keyboard_pub    = self.create_publisher(String, '/keyboard_control', 10)
         # 發布影像狀態（是否找到目標）
-        self.status_pub      = self.create_publisher(String, '/vision_status', 10)
+        #self.status_pub      = self.create_publisher(String, '/vision_status', 10)
         # 訂閱外部配置參數
         self.create_subscription(String, '/system_config', self.config_callback, 10)
         # 訂閱運動控制回報狀態（ready / moving）
@@ -441,14 +441,14 @@ class AutoHitVisionNode(Node):
             dist_center = np.hypot(rcx - cx_img, rcy - cy_img)
             # 若主矩形接近畫面中心 → 啟動打擊序列
             if (not self.hit_sequence_active) and (dist_center < self.start_center_thresh_px):
-                self.keyboard_pub.publish(String(data='t'))  # 啟動信號
+                #self.keyboard_pub.publish(String(data='t'))  # 啟動信號
                 self.hit_sequence_active = True
                 self.hit_index = 0
                 self.seq_phase = 'IDLE'
                 self.get_logger().info(f'Hit sequence started for tile {self.tile_index}')
         else:
             # 若沒找到 → 顯示提示
-            self.publish_status('no_target')
+            #self.publish_status('no_target')
             for vis in (proc_vis, color_vis):
                 cv2.putText(vis, 'No target detected', (10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
@@ -457,7 +457,7 @@ class AutoHitVisionNode(Node):
         if self.hit_sequence_active and len(self.target_points_img) == 3:
             # (1) 完成三點 → 結束
             if self.hit_index >= 3 and self.seq_phase == 'IDLE':
-                self.keyboard_pub.publish(String(data='e'))
+                #self.keyboard_pub.publish(String(data='e'))
                 self.hit_sequence_active = False
                 self.tile_index += 1
                 self.get_logger().info(f'Hit sequence completed for tile {self.tile_index-1}')
@@ -468,7 +468,7 @@ class AutoHitVisionNode(Node):
                 wx, wy = self.image_to_workspace(ix, iy)
                 # 邊界檢查（超界不發布）
                 if (self.workspace_x_min <= wx <= self.workspace_x_max) and (self.workspace_y_min <= wy <= self.workspace_y_max):
-                    self.coordinates_pub.publish(String(data=f"{wx:.2f},{wy:.2f}"))
+                    #self.coordinates_pub.publish(String(data=f"{wx:.2f},{wy:.2f}"))
                     self.get_logger().info(f'[MOVE] to point {self.hit_index+1}/3 -> {wx:.2f},{wy:.2f}')
                 else:
                     self.get_logger().warn(f'[SKIP] point out of workspace: {wx:.2f},{wy:.2f}')
@@ -478,7 +478,7 @@ class AutoHitVisionNode(Node):
             # (3) 等待 ready → 執行打擊
             elif self.seq_phase == 'MOVING':
                 if self.last_status == 'ready' and (time.time() - self.cmd_time) >= self.min_move_settle:
-                    self.keyboard_pub.publish(String(data='h'))
+                    #  self.keyboard_pub.publish(String(data='h'))
                     self.get_logger().info(f'[HIT] on point {self.hit_index+1}')
                     self.seq_phase = 'WAIT_HIT'
                     self.cmd_time = time.time()
@@ -488,7 +488,7 @@ class AutoHitVisionNode(Node):
                 if self.last_status == 'ready' and (time.time() - self.cmd_time) >= self.min_hit_gap:
                     self.hit_index += 1
                     if self.hit_index < 3:
-                        self.keyboard_pub.publish(String(data='n'))
+                        #self.keyboard_pub.publish(String(data='n'))
                         self.get_logger().info(f'[NEXT] advance to point {self.hit_index+1}')
                     self.seq_phase = 'IDLE'
 

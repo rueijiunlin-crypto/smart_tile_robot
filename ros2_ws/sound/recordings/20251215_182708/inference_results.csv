@@ -1,0 +1,5 @@
+timestamp,filepath,label,confidence,dsp_time_ms,classification_time_ms,total_time_ms
+2025-12-15 18:30:07,/home/ced/Desktop/114/smart_tile_robot/ros2_ws/sound/recordings/20251215_182708/00001.wav,good,0.8262,4,2,6
+2025-12-15 18:30:38,/home/ced/Desktop/114/smart_tile_robot/ros2_ws/sound/recordings/20251215_182708/00003.wav,bad,0.9953,4,2,6
+2025-12-15 18:30:38,/home/ced/Desktop/114/smart_tile_robot/ros2_ws/sound/recordings/20251215_182708/00002.wav,bad,0.6305,4,2,6
+2025-12-15 18:31:08,/home/ced/Desktop/114/smart_tile_robot/ros2_ws/sound/recordings/20251215_182708/00004.wav,good,0.8914,4,2,6

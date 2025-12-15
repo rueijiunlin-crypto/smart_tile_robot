@@ -294,7 +294,7 @@ void subscription_move_hit_initialized_callback(const void *msg_in) {
       bool direction = (command == 'a') ? LOW : HIGH;
       digitalWrite(xdirPin, direction);
       for (int i = 0; i < steps; i++) {
-        sendSinglePulse(xstepPin);
+        sendSinglePulse(xstepPin, MIN_PULSE_US);
         delay(50);
       }
     }
@@ -306,6 +306,12 @@ void subscription_move_hit_initialized_callback(const void *msg_in) {
 // ==========================================
 
 void setup() {
+  // 先初始化 Serial（盡早輸出，方便診斷）
+  Serial.begin(115200);
+  delay(1000);  // 等待 Serial 穩定
+  Serial.println("\n\n=== 上機構啟動 ===");
+  Serial.println("初始化針腳...");
+  
   // 初始化針腳
   pinMode(xstepPin, OUTPUT);
   pinMode(xdirPin, OUTPUT);
@@ -315,11 +321,11 @@ void setup() {
   digitalWrite(LED_PIN, LOW);
 
   // 開機閃燈提示
+  Serial.println("LED 閃爍測試...");
   digitalWrite(LED_PIN, HIGH);
   delay(500);
   digitalWrite(LED_PIN, LOW);
-
-  Serial.begin(115200);
+  Serial.println("LED 測試完成");
 
   // === [新算法初始化] ===
   // 假設開機時機器人在正中間，高度為 h (30cm)
@@ -334,12 +340,20 @@ void setup() {
 
   // === [請修改這裡!] ROS WiFi 設定 ===
   // 參數: SSID, 密碼, Agent電腦IP, Agent Port
-  set_microros_wifi_transports("您的WiFi名稱", "您的WiFi密碼", "您的電腦IP", 2024);
+  Serial.println("設定 WiFi 連線...");
+  Serial.print("  SSID: RayG\n");
+  Serial.print("  Agent IP: 172.31.153.161:2024\n");
+  set_microros_wifi_transports("RayG", "n6n6um7i", "172.31.153.161", 2024);
+  Serial.println("WiFi transport 設定完成，等待連線...");
+  delay(2000);  // 給 WiFi 一些時間連接
 
   // 初始化 micro-ROS
+  Serial.println("初始化 micro-ROS...");
   allocator = rcl_get_default_allocator();
   rclc_support_init(&support, 0, NULL, &allocator);
+  Serial.println("  rclc_support_init 完成");
   rclc_node_init_default(&node, "move_node", "", &support);
+  Serial.println("  rclc_node_init_default 完成");
 
   // 建立訂閱者與發布者
   rclc_subscription_init_default(&subscriber_led, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool), "/ros2_led");
@@ -372,11 +386,14 @@ void setup() {
   move_hit_initialized_msg.data.capacity = 100;
 
   // 初始化 Executor
+  Serial.println("初始化 Executor...");
   rclc_executor_init(&executor, &support.context, 4, &allocator);
   rclc_executor_add_subscription(&executor, &subscriber_led, &led_msg, &subscription_led_callback, ON_NEW_DATA);
   rclc_executor_add_subscription(&executor, &subscriber_move, &move_msg, &subscription_move_callback, ON_NEW_DATA);
   rclc_executor_add_subscription(&executor, &subscriber_keyboard_input, &keyboard_input_msg, &subscription_keyboard_input_callback, ON_NEW_DATA);
   rclc_executor_add_subscription(&executor, &subscriber_move_hit_initialized, &move_hit_initialized_msg, &subscription_move_hit_initialized_callback, ON_NEW_DATA);
+  Serial.println("Executor 初始化完成");
+  Serial.println("=== Setup 完成，進入 Loop ===");
 }
 
 // ==========================================
@@ -385,6 +402,11 @@ void setup() {
 
 void loop() {
   // 1. 處理 ROS 訊息 (Check for new messages)
+  static unsigned long lastStatusPrint = 0;
+  if (millis() - lastStatusPrint >= 5000) {  // 每 5 秒輸出一次狀態
+    Serial.println("Loop running... (ROS executor active)");
+    lastStatusPrint = millis();
+  }
   rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100));
 
   // 2. 處理佇列命令 (Queue Processing)
@@ -414,10 +436,17 @@ void loop() {
 
   // 3. 定期發布座標 (Heartbeat) - 讓 ROS 知道我還活著
   static unsigned long lastCoordinatePublishTime = 0;
+  static unsigned long lastPublishErrorPrint = 0;
   if (millis() - lastCoordinatePublishTime >= 1000) {
     snprintf(coordinates_msg.data.data, 100, "Current coordinates: (%d, %d)", current_x_disp, current_y_disp);
     coordinates_msg.data.size = strlen(coordinates_msg.data.data);
-    rcl_publish(&publisher_coordinates, &coordinates_msg, NULL);
+    rcl_ret_t pub_ret = rcl_publish(&publisher_coordinates, &coordinates_msg, NULL);
+    if (pub_ret != RCL_RET_OK && millis() - lastPublishErrorPrint >= 10000) {
+      Serial.print("發布座標失敗，錯誤碼: ");
+      Serial.println(pub_ret);
+      Serial.println("可能原因：尚未連接到 Agent");
+      lastPublishErrorPrint = millis();
+    }
     lastCoordinatePublishTime = millis();
   }
 }

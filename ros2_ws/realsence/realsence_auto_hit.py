@@ -142,7 +142,8 @@ class AutoHitVisionNode(Node):
     # ======================== ROS Callback ========================
     def publish_status(self, status: str):
         """發布目前影像狀態 (e.g. no_target)"""
-        self.status_pub.publish(String(data=status))
+       #  self.status_pub.publish(String(data=status))  # ✅ 註解掉，避免重複發布
+        pass
 
     def config_callback(self, msg: String):
         """接收外部設定 JSON 資料以動態調整參數"""

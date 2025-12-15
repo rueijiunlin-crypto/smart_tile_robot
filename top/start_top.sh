@@ -42,17 +42,40 @@ safe_source "$MICROROS_WS/install/local_setup.bash"
 
 echo "啟動 micro-ROS UDP Agent (port=$AGENT_PORT)..."
 if pgrep -f "micro_ros_agent .*udp4 .*${AGENT_PORT}" >/dev/null 2>&1; then
-  echo "micro-ROS UDP Agent 已在執行，略過。"
-else
-  ros2 run micro_ros_agent micro_ros_agent udp4 --port "$AGENT_PORT" -v6 &
-  AGENT_PID=$!
-  echo "micro-ROS UDP Agent PID: $AGENT_PID"
-  sleep 2
+  echo "發現現有的 micro-ROS UDP Agent，先停止..."
+  pkill -f "micro_ros_agent .*udp4 .*${AGENT_PORT}"
+  sleep 1
 fi
+
+# 清理重複的 keyboard_bridge 進程
+if pgrep -f "keyboard_bridge.py" >/dev/null 2>&1; then
+  echo "清理重複的 keyboard_bridge 進程..."
+  pkill -f "keyboard_bridge.py"
+  sleep 1
+fi
+
+# 創建日誌目錄
+LOG_DIR="$SCRIPT_DIR/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/agent_$(date +%Y%m%d_%H%M%S).log"
+
+# 啟動 Agent 並將輸出保存到日誌
+ros2 run micro_ros_agent micro_ros_agent udp4 --port "$AGENT_PORT" -v6 > "$LOG_FILE" 2>&1 &
+AGENT_PID=$!
+echo "micro-ROS UDP Agent PID: $AGENT_PID"
+echo "Agent 日誌檔案: $LOG_FILE"
+echo "即時查看日誌: tail -f $LOG_FILE"
+sleep 3
 
 # 選用：啟動鍵盤橋接節點，將 /keyboard_control 轉發到 /keyboard_input
 # 如需自動從 vision 節點帶動上機構，建議啟用。
 if [ "${ENABLE_KEYBOARD_BRIDGE:-1}" = "1" ]; then
+  # 確保沒有重複的進程
+  if pgrep -f "keyboard_bridge.py" >/dev/null 2>&1; then
+    echo "發現現有的 keyboard_bridge，先停止..."
+    pkill -f "keyboard_bridge.py"
+    sleep 1
+  fi
   echo "啟動鍵盤橋接節點..."
   python3 "$SCRIPT_DIR/keyboard_bridge.py" &
   BRIDGE_PID=$!
